@@ -41,30 +41,38 @@ class Capsule(nn.Module):
 
         if self.bidirectional:
             self.W = nn.Parameter(
-                nn.init.xavier_normal_(torch.empty(1, self.num_hiddens * 2, self.num_capsule * self.num_hiddens * 2)))
+                nn.init.xavier_normal_(torch.empty(1, self.num_hiddens * 2, self.num_capsule * self.dim_capsule))
+            )
         else:
             self.W = nn.Parameter(
-                nn.init.xavier_normal_(torch.empty(1, self.num_hiddens, self.num_capsule * self.num_hiddens)))
+                nn.init.xavier_normal_(torch.empty(1, self.num_hiddens, self.num_capsule * self.dim_capsule))
+            )
 
     def forward(self, inputs):
-        print(inputs.shape)
-        print(self.W.shape)
-        u_hat_vecs = torch.matmul(inputs, self.W)
+        # 期望 inputs: [batch, seq_len, hidden*dir]   # FIX: 由调用方保证
         batch_size = inputs.size(0)
-        input_num_capsule = inputs.size(1)
-        print(u_hat_vecs.shape)
-        u_hat_vecs = u_hat_vecs.view((batch_size, input_num_capsule,
-                                      self.num_capsule, self.dim_capsule))
+        input_num_capsule = inputs.size(1)  # 即 seq_len
+        in_dim = inputs.size(2)
 
-        u_hat_vecs = u_hat_vecs.permute(
-            0, 2, 1, 3).contiguous()  # (batch_size,num_capsule,input_num_capsule,dim_capsule)
+        # W: [batch, in_dim, num_capsule*dim_capsule]
+        W = self.W.expand(batch_size, -1, -1)
+        u_hat_vecs = torch.matmul(inputs, W)  # [batch, seq_len, num_capsule*dim_capsule]
+
+        # 变形为 [batch, seq_len, num_capsule, dim_capsule]
+        u_hat_vecs = u_hat_vecs.view(batch_size, input_num_capsule, self.num_capsule, self.dim_capsule)
+
+        # 调整为 [batch, num_capsule, seq_len, dim_capsule]
+        u_hat_vecs = u_hat_vecs.permute(0, 2, 1, 3).contiguous()
+
         with torch.no_grad():
-            b = torch.zeros_like(u_hat_vecs[:, :, :, 0])
+            b = torch.zeros_like(u_hat_vecs[:, :, :, 0])  # [batch, num_capsule, seq_len]
+
         for i in range(self.routings):
-            c = torch.nn.functional.softmax(b, dim=1)  # (batch_size,num_capsule,input_num_capsule)
-            outputs = self.activation(torch.sum(c.unsqueeze(-1) * u_hat_vecs, dim=2))  # bij,bijk->bik
+            c = torch.nn.functional.softmax(b, dim=1)  # [batch, num_capsule, seq_len]
+            outputs = self.activation(torch.sum(c.unsqueeze(-1) * u_hat_vecs, dim=2))  # [batch, num_capsule, dim_capsule]
             if i < self.routings - 1:
-                b = (torch.sum(outputs.unsqueeze(2) * u_hat_vecs, dim=-1))  # bik,bijk->bij
+                b = (torch.sum(outputs.unsqueeze(2) * u_hat_vecs, dim=-1))  # [batch, num_capsule, seq_len]
+
         return outputs  # (batch_size, num_capsule, dim_capsule)
 
     @staticmethod
@@ -87,21 +95,17 @@ class SentimentNet(nn.Module):
         self.encoder = nn.LSTM(input_size=self.embed_size, hidden_size=self.num_hiddens,
                                num_layers=self.num_layers, bidirectional=self.bidirectional,
                                dropout=0)
-        # self.attention = Attention(num_hiddens=self.num_hiddens, bidirectional=self.bidirectional)
         self.capsule = Capsule(num_hiddens=self.num_hiddens, bidirectional=self.bidirectional)
-        if self.bidirectional:
-            self.decoder = nn.Linear(num_hiddens * 4, labels)
-        else:
-            self.decoder = nn.Linear(num_hiddens * 2, labels)
+        # FIX: decoder 输入维度改为 num_capsule * dim_capsule（与 Capsule 输出展平后匹配）
+        self.decoder = nn.Linear(self.capsule.num_capsule * self.capsule.dim_capsule, labels)
 
     def forward(self, inputs):
-        embeddings = self.embedding(inputs)
-        states, hidden = self.encoder(embeddings.permute(1, 0, 2))
-        print(states.shape)
-        capsule = self.capsule(states)
-        encoding = torch.cat([capsule[0], capsule[-1]], dim=1)
+        embeddings = self.embedding(inputs)                           # [batch, seq_len, embed]
+        states, hidden = self.encoder(embeddings.permute(1, 0, 2))    # [seq_len, batch, hidden*dir]
+        states = states.permute(1, 0, 2)                              # FIX: [batch, seq_len, hidden*dir] → 供 Capsule
+        capsule = self.capsule(states)                                # [batch, num_capsule, dim_capsule]
+        encoding = capsule.reshape(capsule.size(0), -1)               # FIX: 展平为 [batch, num_capsule*dim_capsule]
         outputs = self.decoder(encoding)
-        # print(outputs)
         return outputs
 
 
@@ -177,9 +181,6 @@ if __name__ == '__main__':
                               'val acc': '%.2f' % (val_acc / m),
                               'time': '%.2f' % (runtime)
                               })
-
-            # tqdm.write('{epoch: %d, train loss: %.4f, train acc: %.2f, val loss: %.4f, val acc: %.2f, time: %.2f}' %
-            #       (epoch, train_loss.data / n, train_acc / n, val_losses.data / m, val_acc / m, runtime))
 
     test_pred = []
     with torch.no_grad():
