@@ -2,22 +2,30 @@ import os
 import sys
 import logging
 import time
-
 import pandas as pd
 import torch
-import torch.optim as optim
 from torch.utils.data import DataLoader
+from torch.optim import AdamW  # ✅ 新写法
 from sklearn.metrics import accuracy_score
-from transformers import BertTokenizerFast, BertForSequenceClassification, AdamW
+from transformers import BertTokenizerFast, BertForSequenceClassification
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
+# ✅ 使用 GPU
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+print(f"🟢 Using device: {device}")
+
+# ✅ 关闭不必要的 wandb 日志
+os.environ["WANDB_DISABLED"] = "true"
+
+# ✅ 读取数据
 train = pd.read_csv("./corpus/imdb/labeledTrainData.tsv", header=0, delimiter="\t", quoting=3)
 test = pd.read_csv("./corpus/imdb/testData.tsv", header=0, delimiter="\t", quoting=3)
 
 
+# ✅ 自定义 Dataset
 class TrainDataset(torch.utils.data.Dataset):
-    def __init__(self, encodings, labels=None):
+    def __init__(self, encodings, labels):
         self.encodings = encodings
         self.labels = labels
 
@@ -31,118 +39,115 @@ class TrainDataset(torch.utils.data.Dataset):
 
 
 class TestDataset(torch.utils.data.Dataset):
-    def __init__(self, encodings, num_samples=0):
+    def __init__(self, encodings):
         self.encodings = encodings
-        self.num_samples = num_samples
 
     def __getitem__(self, idx):
-        item = {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}
-        return item
+        return {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}
 
     def __len__(self):
-        return self.num_samples
+        return len(self.encodings['input_ids'])
 
 
 if __name__ == '__main__':
     program = os.path.basename(sys.argv[0])
     logger = logging.getLogger(program)
-
     logging.basicConfig(format='%(asctime)s: %(levelname)s: %(message)s')
     logging.root.setLevel(level=logging.INFO)
     logger.info(r"running %s" % ''.join(sys.argv))
 
-    train_texts, train_labels, test_texts = [], [], []
-    for i, review in enumerate(train["review"]):
-        train_texts.append(review)
-        train_labels.append(train['sentiment'][i])
+    # 数据拆分
+    train_texts, val_texts, train_labels, val_labels = train_test_split(
+        train["review"].tolist(), train["sentiment"].tolist(), test_size=0.2, random_state=42
+    )
+    test_texts = test["review"].tolist()
 
-    for review in test['review']:
-        test_texts.append(review)
-
-    train_texts, val_texts, train_labels, val_labels = train_test_split(train_texts, train_labels, test_size=.2)
-
+    # ✅ 分词
     tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased')
-
-    train_encodings = tokenizer(train_texts, truncation=True, padding=True)
-    val_encodings = tokenizer(val_texts, truncation=True, padding=True)
-    test_encodings = tokenizer(test_texts, truncation=True, padding=True)
+    train_encodings = tokenizer(train_texts, truncation=True, padding=True, max_length=256)
+    val_encodings = tokenizer(val_texts, truncation=True, padding=True, max_length=256)
+    test_encodings = tokenizer(test_texts, truncation=True, padding=True, max_length=256)
 
     train_dataset = TrainDataset(train_encodings, train_labels)
     val_dataset = TrainDataset(val_encodings, val_labels)
-    test_dataset = TestDataset(test_encodings, num_samples=len(test_texts))
+    test_dataset = TestDataset(test_encodings)
 
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-
-    model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
+    # ✅ 模型
+    model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=2)
     model.to(device)
-    model.train()
 
+    # ✅ DataLoader
     train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
 
-    optim = optim.AdamW(model.parameters(), lr=5e-5)
+    # ✅ 优化器
+    optimizer = AdamW(model.parameters(), lr=5e-5)
 
+    # ✅ 训练
     for epoch in range(3):
-        start = time.time()
-        train_loss, val_losses = 0, 0
+        model.train()
+        start_time = time.time()
+        train_loss, val_loss = 0, 0
         train_acc, val_acc = 0, 0
-        n, m = 0, 0
 
-        with tqdm(total=len(train_loader), desc="Epoch %d" % epoch) as pbar:
+        with tqdm(total=len(train_loader), desc=f"Epoch {epoch+1}") as pbar:
             for batch in train_loader:
-                n += 1
-                optim.zero_grad()
+                optimizer.zero_grad()
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['labels'].to(device)
+
+                outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
+                loss = outputs.loss
+                loss.backward()
+                optimizer.step()
+
+                preds = torch.argmax(outputs.logits, dim=1)
+                acc = (preds == labels).float().mean().item()
+
+                train_loss += loss.item()
+                train_acc += acc
+                pbar.set_postfix({
+                    "loss": f"{train_loss / (pbar.n+1):.4f}",
+                    "acc": f"{train_acc / (pbar.n+1):.4f}"
+                })
+                pbar.update(1)
+
+        # ✅ 验证
+        model.eval()
+        with torch.no_grad():
+            for batch in val_loader:
                 input_ids = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(device)
                 labels = batch['labels'].to(device)
                 outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
-                loss = outputs.loss
-                loss.backward()
-                optim.step()
-                train_acc += accuracy_score(torch.argmax(outputs.logits.cpu().data, dim=1), labels.cpu())
-                train_loss += loss.cpu()
+                val_loss += outputs.loss.item()
+                preds = torch.argmax(outputs.logits, dim=1)
+                acc = (preds == labels).float().mean().item()
+                val_acc += acc
 
-                pbar.set_postfix({'epoch': '%d' % (epoch),
-                                  'train loss': '%.4f' % (train_loss.data / n),
-                                  'train acc': '%.2f' % (train_acc / n)
-                                  })
-                pbar.update(1)
+        print(f"\nEpoch {epoch+1} | Train Loss: {train_loss/len(train_loader):.4f} "
+              f"| Train Acc: {train_acc/len(train_loader):.4f} "
+              f"| Val Loss: {val_loss/len(val_loader):.4f} "
+              f"| Val Acc: {val_acc/len(val_loader):.4f} "
+              f"| Time: {time.time() - start_time:.2f}s")
 
-            with torch.no_grad():
-                for batch in val_loader:
-                    m += 1
-                    input_ids = batch['input_ids'].to(device)
-                    attention_mask = batch['attention_mask'].to(device)
-                    labels = batch['labels'].to(device)
-                    outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
-                    val_loss = outputs.loss
-                    val_acc += accuracy_score(torch.argmax(outputs.logits.cpu().data, dim=1), labels.cpu())
-                    val_losses += val_loss
-            end = time.time()
-            runtime = end - start
-            pbar.set_postfix({'epoch': '%d' % (epoch),
-                              'train loss': '%.4f' % (train_loss.data / n),
-                              'train acc': '%.2f' % (train_acc / n),
-                              'val loss': '%.4f' % (val_losses.data / m),
-                              'val acc': '%.2f' % (val_acc / m),
-                              'time': '%.2f' % (runtime)})
-
-            # print('epoch: %d, train loss: %.4f, train acc: %.2f, val loss: %.4f, val acc: %.2f, time: %.2f' %
-            #       (epoch, train_loss.data / n, train_acc / n, val_losses.data / m, val_acc / m, runtime))
-
+    # ✅ 预测
+    model.eval()
     test_pred = []
     with torch.no_grad():
-        with tqdm(total=len(test_loader), desc='Predction') as Pbar:
+        with tqdm(total=len(test_loader), desc="Predicting") as pbar:
             for batch in test_loader:
                 input_ids = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(device)
                 outputs = model(input_ids, attention_mask=attention_mask)
-                # test_pred.extent
-                test_pred.extend(torch.argmax(outputs.logits.cpu().data, dim=1).numpy().tolist())
-
+                preds = torch.argmax(outputs.logits, dim=1)
+                test_pred.extend(preds.cpu().numpy().tolist())
                 pbar.update(1)
 
+    # ✅ 保存结果
+    os.makedirs("./result", exist_ok=True)
     result_output = pd.DataFrame(data={"id": test["id"], "sentiment": test_pred})
     result_output.to_csv("./result/bert_native.csv", index=False, quoting=3)
-    logging.info('result saved!')
+    logging.info("✅ Result saved to ./result/bert_native.csv")
