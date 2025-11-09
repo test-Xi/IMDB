@@ -7,23 +7,20 @@ IMDB 情感分类任务用于理解自然语言处理中不同模型对文本语
 
 ## 📊 各模型验证集性能对比表（IMDB 数据集）
 
-| 模型名称                  | 文件名                    | 验证集准确率 (Val Acc) | 验证集损失 (Val Loss) | 训练时间/epoch | 说明                                                    |
-| :------------------------ | :------------------------ | :--------------------- | :-------------------- | :------------- | :------------------------------------------------------ |
-| **CNN**                   | `imdb_cnn.py`             | **0.81**               | 0.55                  | ~30s           | 卷积特征提取 + 最大池化                                 |
-| **LSTM**                  | `imdb_lstm.py`            | **0.83**               | 0.52                  | ~35s           | 长期依赖捕获能力强                                      |
-| **GRU**                   | `imdb_gru.py`             | **0.82**               | 0.53                  | ~32s           | 计算更快、结构更轻量                                    |
-| **CNN-LSTM**              | `imdb_cnnlstm.py`         | **0.84**               | 0.50                  | ~38s           | CNN 提取局部 + LSTM 捕获上下文                          |
-| **Attention-LSTM**        | `imdb_attention_lstm.py`  | **0.86**               | 0.48                  | ~42s           | 注意力机制聚焦关键信息                                  |
-| **Capsule-LSTM**          | `imdb_capsule_lstm.py`    | **0.87**               | **0.46**              | ~45s           | 胶囊层提升语义表达能力                                  |
-| **BERT-Native**           | `imdb_bert_native.py`     | **0.90**               | 0.38                  | ~55s           | 直接使用 `BertForSequenceClassification` + 自写训练循环 |
-| **BERT **                 | `imdb_bert_trainer.py`    | **0.92**               | 0.35                  | ~48s           | 使用 HuggingFace `Trainer` 封装，训练/评估更简洁        |
-| **RoBERTa **              | `imdb_roberta_trainer.py` | **0.94**               | 0.31                  | ~50s           | RoBERTa 预训练目标更强，验证集效果最佳                  |
-| **Transformer**           | `imdb_transformer.py`     | **0.88**               | 0.44                  | ~40s           | 基于原生 `n.Transformer` 实现，作为序列建模对比基线     |
-| **DeBERTa-Prompt**        | `imdb_deberta_prompt.py`  | **0.71**               | 0.55                  | ~3min          | 手工 Prompt 设计，效果一般                              |
-| **DeBERTa-LoRA**          | `imdb_deberta_lora.py`    | **0.89 **              | 0.37                  | ~2.5min        | 低秩适配参数注入，表现稳定                              |
-| **DeBERTa-P-Tuning v2**   | `imdb_deberta_ptuning.py` | **0.87 **              | 0.39                  | ~2.8min        | 可学习前缀嵌入，主干冻结                                |
-| **DeBERTa-Prefix Tuning** | `imdb_deberta_prefix.py`  | **0.88**               | 0.38                  | ~3.0min        | 虚拟 token 前缀调节，性能接近 LoRA                      |
+| 模型名称           | 文件名                    | 验证集准确率 (Val Acc) | 验证集损失 (Val Loss) | 训练时间/epoch | 说明                                                    |
+| :----------------- | :------------------------ | :--------------------- | :-------------------- | :------------- | :------------------------------------------------------ |
+| **CNN**            | `imdb_cnn.py`             | **0.81**               | 0.55                  | ~30s           | 卷积特征提取 + 最大池化                                 |
+| **LSTM**           | `imdb_lstm.py`            | **0.83**               | 0.52                  | ~35s           | 长期依赖捕获能力强                                      |
+| **GRU**            | `imdb_gru.py`             | **0.82**               | 0.53                  | ~32s           | 计算更快、结构更轻量                                    |
+| **CNN-LSTM**       | `imdb_cnnlstm.py`         | **0.84**               | 0.50                  | ~38s           | CNN 提取局部 + LSTM 捕获上下文                          |
+| **Attention-LSTM** | `imdb_attention_lstm.py`  | **0.86**               | 0.48                  | ~42s           | 注意力机制聚焦关键信息                                  |
+| **Capsule-LSTM**   | `imdb_capsule_lstm.py`    | **0.87**               | 0.46                  | ~45s           | 胶囊层提升语义表达能力                                  |
+| **BERT-Native**    | `imdb_bert_native.py`     | **0.90**               | 0.38                  | ~55s           | 直接使用 `BertForSequenceClassification` + 自写训练循环 |
+| **BERT**         | `imdb_bert_trainer.py`    | **0.92**               | 0.35                  | ~48s           | 使用 HuggingFace `Trainer` 封装，训练/评估更简洁        |
+| **RoBERTa**       | `imdb_roberta_trainer.py` | **0.94**               | 0.31                  | ~50s           | RoBERTa 预训练目标更强，验证集效果最佳                  |
+| **Transformer**    | `imdb_transformer.py`     | **0.88**               | 0.44                  | ~40s           | 基于原生 `n.Transformer` 实现，作为序列建模对比基线     |
 
+> 💡 以上数值根据日志末尾的 “val acc” 与 “val loss” 统计得到。  
 > 其中 **Capsule-LSTM** 表现最佳，说明引入胶囊层与双向时序结构能显著增强语义捕获能力。
 
 ## 🧩 分类结果分析
@@ -38,12 +35,12 @@ IMDB 情感分类任务用于理解自然语言处理中不同模型对文本语
    
    - Attention-LSTM 和 Capsule-LSTM 在语义捕获与情感极性区分上更具优势。
    
-       进一步引入 Transformer 与预训练语言模型后，模型表现显著提升：
+   进一步引入 Transformer 与预训练语言模型后，模型表现显著提升：
    
-       - **Transformer (PyTorch baseline)** 能更充分建模长距离依赖，验证集准确率提升至约 **0.88**；
+   - **Transformer (PyTorch baseline)** 能更充分建模长距离依赖，验证集准确率提升至约 **0.88**；
    
-       - **BERT (Native / HF Trainer)** 依托大规模语料的上下文预训练，在语义判别任务上显著优于传统 RNN / CNN；
-       - **RoBERTa** 在同等结构下使用更充分的预训练策略，验证集准确率最高 (**0.94**)，说明其语义理解与情感表达捕获能力最强。
+   - **BERT (Native / HF Trainer)** 依托大规模语料的上下文预训练，在语义判别任务上显著优于传统 RNN / CNN；
+   - **RoBERTa** 在同等结构下使用更充分的预训练策略，验证集准确率最高 (**0.94**)，说明其语义理解与情感表达捕获能力最强。
    
 2. **正负样本区分情况**
    - 简短评论（如 “great movie”, “waste of time”）各模型均能正确分类；
@@ -72,3 +69,5 @@ IMDB 情感分类任务用于理解自然语言处理中不同模型对文本语
 conda create -n torch310 python=3.10
 conda activate torch310
 pip install torch pandas scikit-learn tqdm
+pip install transformers datasets evaluate
+pip install beautifulsoup4
