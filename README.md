@@ -20,7 +20,7 @@ IMDB 情感分类任务用于理解自然语言处理中不同模型对文本语
 | **RoBERTa**       | `imdb_roberta_trainer.py` | **0.94**               | 0.31                  | ~50s           | RoBERTa 预训练目标更强，验证集效果最佳                  |
 | **Transformer**    | `imdb_transformer.py`     | **0.88**               | 0.44                  | ~40s           | 基于原生 `n.Transformer` 实现，作为序列建模对比基线     |
 | **DeBERTa-Prompt**   | `imdb_deberta_prompt.py`  | **0.5848**           | **0.6734**           | ~14 min       | DeBERTa + 手工 Prompt，基线模型。 |
-| **DeBERTa-Prefix**  | `imdb_deberta_prefix.py`  | **0.8000**           | **0.5000**           | ~50 s         | Prefix-Tuning，占位估计结果。     |
+
 | **DeBERTa-P-Tuning** | `imdb_deberta_ptuning.py` | **0.7162**           | **0.5313**           | ~8.5 min      | 连续提示，参数高效。                |
 | **DeBERTa-LoRA**     | `imdb_deberta_lora.py`    | **0.9418**           | **0.2960**           | ~18 min       | LoRA 适配层，小参数高性能。          |
 
