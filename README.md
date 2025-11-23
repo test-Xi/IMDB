@@ -26,7 +26,7 @@ IMDB 情感分类任务用于理解自然语言处理中不同模型对文本语
 | **DeBERTa-P-Tuning**   | `imdb_deberta_ptuning.py`       | **0.7162**             | **0.5313**            | ~8.5 min       | 连续提示，参数高效                                      |
 | **DeBERTa-LoRA**       | `imdb_deberta_lora.py`          | **0.9418**             | **0.2960**            | ~18 min        | LoRA 适配层，小参数高性能                               |
 | **DeBERTa-LoRA(Unsloth)** | `imdb_modernbert_unsloth.py` | **0.95**               | **0.30**              | ~5.5 min       | 基于 DeBERTa-v3-base + Unsloth LoRA，加速训练且性能领先 |
-
+| **Qwen-Instruction (LLM)**   | `imdb_llm_prompt.py`  | **0.91**               | -                     | 无训练（约2.5s/条推理） | 开源大模型 + 指令学习：用中文任务描述 + 英文影评，零样本完成情感分类 |
 
 > 💡 以上数值根据日志末尾的 “val acc” 与 “val loss” 统计得到。  
 
